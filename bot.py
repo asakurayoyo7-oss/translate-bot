@@ -3,10 +3,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
-translator = Translator()
-
+# Web server giả lập để Render duy trì cổng hoạt động 24/7
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -18,12 +17,10 @@ def run_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# Hàm xử lý văn phong lịch sự khi dịch sang tiếng Việt
+# Hàm tự động thêm văn phong kính ngữ/trang trọng khi dịch sang tiếng Việt
 def apply_honorifics(text):
-    # Thêm sự trang trọng vào đầu câu nếu chưa có
     if not text.startswith("Dạ, "):
         text = "Dạ, " + text[0].lower() + text[1:]
-    # Thay thế các từ xưng hô thông thường thành trang trọng hơn
     text = text.replace("Bạn", "Sếp").replace("bạn", "sếp")
     return text
 
@@ -36,22 +33,30 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Kiểm tra xem có chứa ký tự tiếng Hàn không để quyết định hướng dịch
         is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_text)
         
         if is_korean:
-            # Dịch từ Hàn sang Việt và ép thêm kính ngữ
-            translation = translator.translate(user_text, src='ko', dest='vi')
-            polite_text = apply_honorifics(translation.text)
+            translation = GoogleTranslator(source='ko', target='vi').translate(user_text)
+            polite_text = apply_honorifics(translation)
             response_message = f"🇰🇷 ➔ 🇻🇳 (Kính ngữ)\n{polite_text}"
         else:
-            # Dịch từ Việt sang Hàn (thường tiếng Hàn dùng thể lịch sự/đuôi câu -습니다/입니다)
-            translation = translator.translate(user_text, src='vi', dest='ko')
-            response_message = f"🇻🇳 ➔ 🇰🇷\n{translation.text}"
+            translation = GoogleTranslator(source='vi', target='ko').translate(user_text)
+            response_message = f"🇻🇳 ➔ 🇰🇷\n{translation}"
             
         await update.message.reply_text(response_message)
         
-    except Exception:
-        pass
+    except Exception as e:
+        # Cơ chế dự phòng nếu gặp lỗi mạng tạm thời
+        try:
+            if is_korean:
+                fallback_trans = GoogleTranslator(source='ko', target='vi').translate(user_text)
+                await update.message.reply_text(f"🇰🇷 ➔ 🇻🇳 (Kính ngữ)\n{apply_honorifics(fallback_trans)}")
+            else:
+                fallback_trans = GoogleTranslator(source='vi', target='ko').translate(user_text)
+                await update.message.reply_text(f"🇻🇳 ➔ 🇰🇷\n{fallback_trans}")
+        except Exception:
+            pass
 
 if __name__ == '__main__':
     t = threading.Thread(target=run_server)
