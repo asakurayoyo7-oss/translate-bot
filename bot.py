@@ -1,4 +1,5 @@
 import os
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from telegram import Update
@@ -33,7 +34,6 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Kiểm tra xem có chứa ký tự tiếng Hàn không để quyết định hướng dịch
         is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_text)
         
         if is_korean:
@@ -46,8 +46,7 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         await update.message.reply_text(response_message)
         
-    except Exception as e:
-        # Cơ chế dự phòng nếu gặp lỗi mạng tạm thời
+    except Exception:
         try:
             if is_korean:
                 fallback_trans = GoogleTranslator(source='ko', target='vi').translate(user_text)
@@ -58,11 +57,22 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-if __name__ == '__main__':
-    t = threading.Thread(target=run_server)
-    t.daemon = True
-    t.start()
+async def main():
+    # Khởi chạy Web Server ở luồng riêng
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
 
+    # Khởi chạy Telegram Bot ứng dụng phiên bản mới
     application = ApplicationBuilder().token("8684404526:AAERMQiQRE5rTTaBeVuqVzdaKSFBqmCiuAc").build()
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), translate_text))
-    application.run_polling()
+
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+
+    # Giữ cho bot chạy liên tục
+    stop_event = asyncio.Event()
+    await stop_event.wait()
+
+if __name__ == '__main__':
+    asyncio.run(main())
