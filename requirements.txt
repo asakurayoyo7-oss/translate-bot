@@ -1,2 +1,2 @@
-python-telegram-bot[job-queue]
-deep-translator
+python-telegram-bot==21.1.1
+googletrans==4.0.0-rc1
