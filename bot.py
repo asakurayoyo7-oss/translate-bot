@@ -27,15 +27,17 @@ model = genai.GenerativeModel(
 
 @app.route('/')
 def home():
-    return "Bot is running with Webhook!"
+    return "Bot Webhook is running!"
 
-# Đường nhận tin nhắn tự động từ Telegram gửi đến
 @app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
 def webhook():
-    json_str = request.get_data().decode('UTF-8')
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return 'Forbidden', 403
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
 def translate_message(message):
@@ -53,10 +55,9 @@ def translate_message(message):
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
     except Exception as e:
-        print(f"Lỗi dịch: {e}")
+        print(f"Lỗi xử lý dịch: {e}")
 
 if __name__ == "__main__":
-    # Tự động gán Webhook khi khởi chạy app
     WEBHOOK_URL = f"https://translate-bot171.onrender.com/{TELEGRAM_BOT_TOKEN}"
     bot.remove_webhook()
     bot.set_webhook(url=WEBHOOK_URL)
