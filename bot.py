@@ -5,7 +5,7 @@ import telebot
 from google import genai
 from google.genai import types
 
-# --- Phần tạo Web Server nhỏ để UptimeRobot "ping" không bị lỗi 502 ---
+# --- Phần tạo Web Server nhỏ để bot không bị ngủ đông ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -15,12 +15,13 @@ def home():
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-# --------------------------------------------------------------------
+# --------------------------------------------------------
 
-# Lấy token từ biến môi trường trên Render
+# Lấy thông tin an toàn từ biến môi trường trên Render
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# Khởi tạo bot và client
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -41,7 +42,7 @@ def translate_message(message):
         )
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=text,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
@@ -64,7 +65,7 @@ def translate_message(message):
         print(f"Lỗi dịch: {e}")
 
 if __name__ == "__main__":
-    # Chạy Web Server ở một luồng riêng để không chặn bot Telegram
+    # Chạy Web Server trong một luồng riêng
     t = threading.Thread(target=run_web)
     t.start()
     
