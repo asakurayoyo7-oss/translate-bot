@@ -1,25 +1,15 @@
 import os
-import threading
-from flask import Flask
+from flask import Flask, request
 import telebot
 import google.generativeai as genai
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is alive and running!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
 genai.configure(api_key=GEMINI_API_KEY)
+
+app = Flask(__name__)
 
 system_instruction = (
     "Bạn là một biên phiên dịch chuyên nghiệp. Hãy dịch câu được cung cấp: "
@@ -34,6 +24,18 @@ model = genai.GenerativeModel(
     model_name='gemini-1.5-flash',
     system_instruction=system_instruction
 )
+
+@app.route('/')
+def home():
+    return "Bot is running with Webhook!"
+
+# Đường nhận tin nhắn tự động từ Telegram gửi đến
+@app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
 def translate_message(message):
@@ -51,12 +53,13 @@ def translate_message(message):
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
     except Exception as e:
-        print(f"Lỗi: {e}")
+        print(f"Lỗi dịch: {e}")
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_web)
-    t.start()
-    
+    # Tự động gán Webhook khi khởi chạy app
+    WEBHOOK_URL = f"https://translate-bot171.onrender.com/{TELEGRAM_BOT_TOKEN}"
     bot.remove_webhook()
-    print("Bot đã sẵn sàng...")
-    bot.infinity_polling(skip_pending=True)
+    bot.set_webhook(url=WEBHOOK_URL)
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
