@@ -5,7 +5,7 @@ import telebot
 from google import genai
 from google.genai import types
 
-# --- Phần tạo Web Server nhỏ để bot không bị ngủ đông ---
+# --- Tạo Web Server nhỏ để UptimeRobot "ping" ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -15,20 +15,24 @@ def home():
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-# --------------------------------------------------------
+# -----------------------------------------------
 
-# Lấy thông tin an toàn từ biến môi trường trên Render
+# Lấy token và API key từ biến môi trường của Render
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Khởi tạo bot và client
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-@bot.message_handler(func=lambda message: True)
+# Lắng nghe TẤT CẢ tin nhắn trong nhóm mà không cần phải reply
+@bot.message_handler(func=lambda message: True, content_types=['text'])
 def translate_message(message):
     text = message.text
     if not text:
+        return
+
+    # Bỏ qua nếu tin nhắn là lệnh bot (bắt đầu bằng dấu /)
+    if text.startswith('/'):
         return
 
     try:
@@ -59,13 +63,14 @@ def translate_message(message):
             direction_label = "🇻🇳 ➔ 🇰🇷"
 
         reply_text = f"{direction_label}\n{translated_text}"
+        
+        # Gửi tin nhắn trả lời trực tiếp vào câu vừa nhắn
         bot.reply_to(message, reply_text)
 
     except Exception as e:
         print(f"Lỗi dịch: {e}")
 
 if __name__ == "__main__":
-    # Chạy Web Server trong một luồng riêng
     t = threading.Thread(target=run_web)
     t.start()
     
