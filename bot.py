@@ -7,6 +7,8 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+
+# Cấu hình cho key dạng AQ... mới của Google
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
