@@ -30,7 +30,6 @@ model = genai.GenerativeModel(
 def home():
     return "Bot is running!"
 
-# Dùng một đường dẫn cố định /webhook để không bao giờ bị lỗi 404
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
@@ -38,7 +37,7 @@ def webhook():
         update = telebot.types.Update.de_json(json_str)
         bot.process_new_updates([update])
     except Exception as e:
-        print(f"Lỗi Webhook: {e}")
+        print(f"LỖI WEBHOOK CHI TIẾT: {e}")
     return "OK", 200
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
@@ -57,7 +56,9 @@ def translate_message(message):
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
     except Exception as e:
-        print(f"Lỗi AI Gemini: {e}")
+        # In ngay lỗi ra bảng log của Render để chúng ta nhìn thấy
+        print(f"LỖI KHI GỌI GEMINI AI: {str(e)}")
+        bot.reply_to(message, f"Lỗi AI: {str(e)}")
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
