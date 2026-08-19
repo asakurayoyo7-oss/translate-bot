@@ -4,7 +4,6 @@ from flask import Flask
 import telebot
 import google.generativeai as genai
 
-# Web server nhỏ để duy trì trạng thái Live trên Render
 app = Flask(__name__)
 
 @app.route('/')
@@ -15,22 +14,20 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# Lấy token và API key từ biến môi trường của Render
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# Cấu hình Gemini bằng thư viện truyền thống siêu ổn định
 genai.configure(api_key=GEMINI_API_KEY)
 
 system_instruction = (
     "Bạn là một biên phiên dịch chuyên nghiệp. Hãy dịch câu được cung cấp: "
     "Nếu là tiếng Việt, hãy dịch sang tiếng Hàn. Nếu là tiếng Hàn, hãy dịch sang tiếng Việt. "
     "QUY TẮC BẮT BUỘC: "
-    "1. Khi dịch sang tiếng Hàn, phải dùng văn phong kính ngữ lịch sự (존댓말), không dùng thể trống không. "
-    "2. Khi dịch sang tiếng Việt, phải giữ đúng ý nghĩa gốc, tuyệt đối không tự ý thêm các từ xưng hô. "
-    "3. Chỉ trả về kết quả dịch, không kèm theo bất kỳ giải thích nào."
+    "1. Khi dịch sang tiếng Hàn, phải dùng văn phong kính ngữ lịch sự (존댓말). "
+    "2. Khi dịch sang tiếng Việt, phải giữ đúng ý nghĩa gốc, tuyệt đối không tự ý thêm từ xưng hô. "
+    "3. Chỉ trả về kết quả dịch, không kèm giải thích."
 )
 
 model = genai.GenerativeModel(
@@ -45,7 +42,6 @@ def translate_message(message):
         return
 
     try:
-        # Gọi Gemini dịch thuật
         response = model.generate_content(text)
         translated_text = response.text.strip()
         
@@ -54,14 +50,15 @@ def translate_message(message):
 
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
-        print(f"Đã dịch thành công: {text} -> {translated_text}")
-
     except Exception as e:
-        print(f"Lỗi dịch thuật: {e}")
+        print(f"Lỗi: {e}")
 
 if __name__ == "__main__":
     t = threading.Thread(target=run_web)
     t.start()
     
-    print("Bot đang chạy...")
-    bot.infinity_polling()
+    # Xóa webhook cũ đang bị treo để tránh lỗi 409 Conflict
+    bot.remove_webhook()
+    
+    print("Bot đã khởi động thành công và sẵn sàng dịch...")
+    bot.infinity_polling(skip_pending=True)
