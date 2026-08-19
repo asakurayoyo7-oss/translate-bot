@@ -1,4 +1,5 @@
 import os
+import threading
 from flask import Flask, request
 import telebot
 import google.generativeai as genai
@@ -7,8 +8,6 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
-# Cấu hình cho key dạng AQ... mới của Google
 genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
@@ -29,17 +28,17 @@ model = genai.GenerativeModel(
 
 @app.route('/')
 def home():
-    return "Bot Webhook is running!"
+    return "Bot is alive!"
 
 @app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
 def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
+    try:
+        json_str = request.get_data().decode('UTF-8')
+        update = telebot.types.Update.de_json(json_str)
         bot.process_new_updates([update])
-        return '', 200
-    else:
-        return 'Forbidden', 403
+    except Exception as e:
+        print(f"Lỗi Webhook: {e}")
+    return "OK", 200
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
 def translate_message(message):
@@ -57,12 +56,22 @@ def translate_message(message):
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
     except Exception as e:
-        print(f"Lỗi xử lý dịch: {e}")
+        print(f"Lỗi AI Gemini: {e}")
+        bot.reply_to(message, "Đang bận xíu, bạn nhắn lại nhé!")
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
     WEBHOOK_URL = f"https://translate-bot171.onrender.com/{TELEGRAM_BOT_TOKEN}"
-    bot.remove_webhook()
-    bot.set_webhook(url=WEBHOOK_URL)
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    try:
+        bot.remove_webhook()
+        bot.set_webhook(url=WEBHOOK_URL)
+    except Exception as e:
+        print(f"Lỗi gán Webhook: {e}")
+
+    # Chạy Flask ở luồng riêng để không bao giờ bị nghẽn
+    t = threading.Thread(target=run_flask)
+    t.start()
+    print("Bot đã sẵn sàng và chạy ổn định...")
