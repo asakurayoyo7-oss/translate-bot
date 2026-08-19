@@ -5,7 +5,7 @@ import telebot
 from google import genai
 from google.genai import types
 
-# Tạo Web Server nhỏ để UptimeRobot "ping" duy trì hoạt động
+# Web server để giữ bot luôn sống qua UptimeRobot
 app = Flask(__name__)
 
 @app.route('/')
@@ -16,7 +16,6 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# Lấy token và API key từ biến môi trường của Render
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
@@ -39,7 +38,6 @@ def translate_message(message):
             "3. Chỉ trả về kết quả dịch, không kèm theo bất kỳ giải thích nào."
         )
 
-        # Sử dụng đúng cú pháp gọi model của thư viện google-genai mới
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=text,
@@ -57,11 +55,9 @@ def translate_message(message):
         bot.reply_to(message, reply_text)
 
     except Exception as e:
-        print(f"Lỗi xử lý: {e}")
+        print(f"Lỗi dịch thuật: {e}")
 
 if __name__ == "__main__":
     t = threading.Thread(target=run_web)
     t.start()
-    
-    print("Bot đang chạy...")
     bot.infinity_polling()
