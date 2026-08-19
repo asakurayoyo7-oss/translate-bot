@@ -1,82 +1,72 @@
 import os
-import asyncio
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from deep_translator import GoogleTranslator
+from flask import Flask
+import telebot
+from google import genai
+from google.genai import types
 
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
+# --- Phần tạo Web Server nhỏ để UptimeRobot "ping" không bị lỗi 502 ---
+app = Flask(__name__)
 
-def run_server():
+@app.route('/')
+def home():
+    return "Bot is alive and running!"
+
+def run_web():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
-    server.serve_forever()
+    app.run(host="0.0.0.0", port=port)
+# --------------------------------------------------------------------
 
-# Hàm ngầm tự động thêm kính ngữ tiếng Việt
-def apply_vietnamese_honorifics(text):
-    if not text.startswith("Dạ, "):
-        text = "Dạ, " + text[0].lower() + text[1:]
-    text = text.replace("Bạn", "Sếp").replace("bạn", "sếp")
-    return text
+# Lấy token từ biến môi trường trên Render
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Hàm ngầm tự động chuẩn hóa từ lịch sự tiếng Hàn
-def apply_korean_honorifics(text):
-    text = text.replace("응,", "네,").replace("Ừ,", "네,").replace("ừ,", "네,")
-    return text
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
-async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    user_text = update.message.text
-    if user_text.startswith('/'):
+@bot.message_handler(func=lambda message: True)
+def translate_message(message):
+    text = message.text
+    if not text:
         return
 
     try:
-        is_korean = any('\uac00' <= char <= '\ud7a3' for char in user_text)
+        system_instruction = (
+            "Bạn là một biên phiên dịch chuyên nghiệp. Hãy dịch câu được cung cấp: "
+            "Nếu là tiếng Việt, hãy dịch sang tiếng Hàn. Nếu là tiếng Hàn, hãy dịch sang tiếng Việt. "
+            "QUY TẮC BẮT BUỘC: "
+            "1. Khi dịch sang tiếng Hàn, phải dùng văn phong kính ngữ lịch sự (존댓말), không dùng thể trống không. "
+            "2. Khi dịch sang tiếng Việt, phải giữ đúng ý nghĩa gốc, tuyệt đối không tự ý thêm các từ xưng hô như 'sếp', 'đại diện' hay thay đổi chủ ngữ nếu câu gốc không có. "
+            "3. Chỉ trả về kết quả dịch, không kèm theo bất kỳ giải thích nào."
+        )
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=text,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.3,
+            ),
+        )
         
-        if is_korean:
-            translation = GoogleTranslator(source='ko', target='vi').translate(user_text)
-            polite_text = apply_vietnamese_honorifics(translation)
-            # Chỉ hiển thị lá cờ và kết quả dịch
-            response_message = f"🇰🇷 ➔ 🇻🇳\n{polite_text}"
+        translated_text = response.text.strip()
+        has_korean = any(ord('가') <= ord(c) <= ord('힣') for c in text)
+        
+        if has_korean:
+            direction_label = "🇰🇷 ➔ 🇻🇳"
         else:
-            translation = GoogleTranslator(source='vi', target='ko').translate(user_text)
-            polite_korean = apply_korean_honorifics(translation)
-            # Chỉ hiển thị lá cờ và kết quả dịch
-            response_message = f"🇻🇳 ➔ 🇰🇷\n{polite_korean}"
-            
-        await update.message.reply_text(response_message)
-        
-    except Exception:
-        try:
-            if is_korean:
-                fallback_trans = GoogleTranslator(source='ko', target='vi').translate(user_text)
-                await update.message.reply_text(f"🇰🇷 ➔ 🇻🇳\n{apply_vietnamese_honorifics(fallback_trans)}")
-            else:
-                fallback_trans = GoogleTranslator(source='vi', target='ko').translate(user_text)
-                await update.message.reply_text(f"🇻🇳 ➔ 🇰🇷\n{apply_korean_honorifics(fallback_trans)}")
-        except Exception:
-            pass
+            direction_label = "🇻🇳 ➔ 🇰🇷"
 
-async def main():
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
+        reply_text = f"{direction_label}\n{translated_text}"
+        bot.reply_to(message, reply_text)
 
-    application = ApplicationBuilder().token("8684404526:AAERMQiQRE5rTTaBeVuqVzdaKSFBqmCiuAc").build()
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), translate_text))
+    except Exception as e:
+        print(f"Lỗi dịch: {e}")
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
-    stop_event = asyncio.Event()
-    await stop_event.wait()
-
-if __name__ == '__main__':
-    asyncio.run(main())
+if __name__ == "__main__":
+    # Chạy Web Server ở một luồng riêng để không chặn bot Telegram
+    t = threading.Thread(target=run_web)
+    t.start()
+    
+    print("Bot và Web Server đang chạy...")
+    bot.infinity_polling()
