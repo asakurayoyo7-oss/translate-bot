@@ -28,9 +28,10 @@ model = genai.GenerativeModel(
 
 @app.route('/')
 def home():
-    return "Bot is alive!"
+    return "Bot is running!"
 
-@app.route(f'/{TELEGRAM_BOT_TOKEN}', methods=['POST'])
+# Dùng một đường dẫn cố định /webhook để không bao giờ bị lỗi 404
+@app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         json_str = request.get_data().decode('UTF-8')
@@ -57,21 +58,11 @@ def translate_message(message):
         bot.reply_to(message, reply_text)
     except Exception as e:
         print(f"Lỗi AI Gemini: {e}")
-        bot.reply_to(message, "Đang bận xíu, bạn nhắn lại nhé!")
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    WEBHOOK_URL = f"https://translate-bot171.onrender.com/{TELEGRAM_BOT_TOKEN}"
-    try:
-        bot.remove_webhook()
-        bot.set_webhook(url=WEBHOOK_URL)
-    except Exception as e:
-        print(f"Lỗi gán Webhook: {e}")
-
-    # Chạy Flask ở luồng riêng để không bao giờ bị nghẽn
     t = threading.Thread(target=run_flask)
     t.start()
-    print("Bot đã sẵn sàng và chạy ổn định...")
