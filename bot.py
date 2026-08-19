@@ -21,8 +21,9 @@ system_instruction = (
     "3. Chỉ trả về kết quả dịch, không kèm giải thích."
 )
 
+# Đổi sang model chuẩn tương thích với Vertex AI key
 model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash',
+    model_name='gemini-1.5-flash-002',
     system_instruction=system_instruction
 )
 
@@ -37,7 +38,7 @@ def webhook():
         update = telebot.types.Update.de_json(json_str)
         bot.process_new_updates([update])
     except Exception as e:
-        print(f"LỖI WEBHOOK CHI TIẾT: {e}")
+        print(f"Lỗi Webhook: {e}")
     return "OK", 200
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
@@ -56,8 +57,7 @@ def translate_message(message):
         reply_text = f"{direction_label}\n{translated_text}"
         bot.reply_to(message, reply_text)
     except Exception as e:
-        # In ngay lỗi ra bảng log của Render để chúng ta nhìn thấy
-        print(f"LỖI KHI GỌI GEMINI AI: {str(e)}")
+        print(f"Lỗi AI: {e}")
         bot.reply_to(message, f"Lỗi AI: {str(e)}")
 
 def run_flask():
