@@ -1,31 +1,48 @@
 import os
 import threading
+import requests
+import json
 from flask import Flask, request
 import telebot
-import google.generativeai as genai
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-genai.configure(api_key=GEMINI_API_KEY)
-
 app = Flask(__name__)
 
-system_instruction = (
-    "Bạn là một biên phiên dịch chuyên nghiệp. Hãy dịch câu được cung cấp: "
-    "Nếu là tiếng Việt, hãy dịch sang tiếng Hàn. Nếu là tiếng Hàn, hãy dịch sang tiếng Việt. "
-    "QUY TẮC BẮT BUỘC: "
-    "1. Khi dịch sang tiếng Hàn, phải dùng văn phong kính ngữ lịch sự (존댓말). "
-    "2. Khi dịch sang tiếng Việt, phải giữ đúng ý nghĩa gốc, tuyệt đối không tự ý thêm từ xưng hô. "
-    "3. Chỉ trả về kết quả dịch, không kèm giải thích."
-)
+# Hàm gọi Gemini trực tiếp qua REST API của Google Cloud (hỗ trợ key AQ...)
+def translate_with_gemini(text):
+    # Xác định hướng dịch để đưa prompt tối ưu
+    has_korean = any(ord('가') <= ord(c) <= ord('힣') for c in text)
+    if has_korean:
+        prompt = f"Dịch câu sau sang tiếng Việt tự nhiên, giữ nguyên ý nghĩa, tuyệt đối không thêm từ xưng hô: {text}"
+        direction_label = "🇰🇷 ➔ 🇻🇳"
+    else:
+        prompt = f"Dịch câu sau sang tiếng Hàn, dùng văn phong kính ngữ lịch sự (존댓말), chỉ trả về kết quả không kèm giải thích: {text}"
+        direction_label = "🇻🇳 ➔ 🇰🇷"
 
-# Đổi sang model chuẩn tương thích với Vertex AI key
-model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash-002',
-    system_instruction=system_instruction
-)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        res_json = response.json()
+        
+        if "candidates" in res_json:
+            translated_text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return f"{direction_label}\n{translated_text}"
+        else:
+            print(f"Lỗi trả về từ Google API: {res_json}")
+            return f"Lỗi API: {res_json.get('error', {}).get('message', 'Không rõ nguyên nhân')}"
+    except Exception as e:
+        print(f"Lỗi kết nối API: {e}")
+        return f"Lỗi kết nối: {str(e)}"
 
 @app.route('/')
 def home():
@@ -42,23 +59,14 @@ def webhook():
     return "OK", 200
 
 @bot.message_handler(func=lambda message: True, content_types=['text'])
-def translate_message(message):
+def handle_message(message):
     text = message.text
     if not text or text.startswith('/'):
         return
 
-    try:
-        response = model.generate_content(text)
-        translated_text = response.text.strip()
-        
-        has_korean = any(ord('가') <= ord(c) <= ord('힣') for c in text)
-        direction_label = "🇰🇷 ➔ 🇻🇳" if has_korean else "🇻🇳 ➔ 🇰🇷"
-
-        reply_text = f"{direction_label}\n{translated_text}"
-        bot.reply_to(message, reply_text)
-    except Exception as e:
-        print(f"Lỗi AI: {e}")
-        bot.reply_to(message, f"Lỗi AI: {str(e)}")
+    # Gọi hàm dịch trực tiếp và phản hồi lại Telegram
+    result = translate_with_gemini(text)
+    bot.reply_to(message, result)
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
