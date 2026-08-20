@@ -1,7 +1,6 @@
 import os
 import threading
 import requests
-import json
 from flask import Flask, request
 import telebot
 
@@ -11,9 +10,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 app = Flask(__name__)
 
-# Hàm gọi Gemini trực tiếp qua REST API của Google Cloud (hỗ trợ key AQ...)
 def translate_with_gemini(text):
-    # Xác định hướng dịch để đưa prompt tối ưu
     has_korean = any(ord('가') <= ord(c) <= ord('힣') for c in text)
     if has_korean:
         prompt = f"Dịch câu sau sang tiếng Việt tự nhiên, giữ nguyên ý nghĩa, tuyệt đối không thêm từ xưng hô: {text}"
@@ -22,7 +19,8 @@ def translate_with_gemini(text):
         prompt = f"Dịch câu sau sang tiếng Hàn, dùng văn phong kính ngữ lịch sự (존댓말), chỉ trả về kết quả không kèm giải thích: {text}"
         direction_label = "🇻🇳 ➔ 🇰🇷"
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Dùng API version v1 và model gemini-pro (được hỗ trợ rộng rãi trên Google Cloud)
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
     headers = {'Content-Type': 'application/json'}
     data = {
         "contents": [{
@@ -64,7 +62,6 @@ def handle_message(message):
     if not text or text.startswith('/'):
         return
 
-    # Gọi hàm dịch trực tiếp và phản hồi lại Telegram
     result = translate_with_gemini(text)
     bot.reply_to(message, result)
 
