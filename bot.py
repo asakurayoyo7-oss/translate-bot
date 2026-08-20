@@ -23,19 +23,23 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         has_korean = any('가' <= c <= '힣' for c in user_text)
         
         if has_korean:
-            # Nếu có tiếng Hàn -> Dịch sang Tiếng Việt
+            # Nếu là tiếng Hàn -> Dịch sang Tiếng Việt
             translated = GoogleTranslator(source='ko', target='vi').translate(user_text)
+            # Cờ cho chiều Hàn -> Việt (Hiển thị trên một dòng riêng)
+            flag_line = "🇰🇷 ➡️ 🇻🇳"
         else:
-            # Nếu là tiếng Việt (hoặc ngôn ngữ khác) -> Dịch sang Tiếng Hàn kính ngữ/trang trọng
+            # Nếu là tiếng Việt -> Dịch sang Tiếng Hàn
             translated = GoogleTranslator(source='vi', target='ko').translate(user_text)
+            # Cờ cho chiều Việt -> Hàn (Hiển thị trên một dòng riêng)
+            flag_line = "🇻🇳 ➡️ 🇰🇷"
 
-        # Trả về kết quả dịch chuẩn xác
+        # Trả về kết quả: Dòng cờ, xuống dòng (\n), sau đó là nội dung dịch
         if translated:
-            await update.message.reply_text(translated)
+            final_reply = f"{flag_line}\n{translated}"
+            await update.message.reply_text(final_reply)
             
     except Exception as e:
         print(f"Lỗi dịch thuật: {e}")
-        # Không làm gì thêm để tránh spam lỗi vào nhóm
 
 if __name__ == '__main__':
     # Token của bạn
