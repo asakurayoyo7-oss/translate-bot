@@ -1,74 +1,49 @@
-import os
-import threading
-import requests
-from flask import Flask, request
-import telebot
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from deep_translator import GoogleTranslator
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Thiết lập ghi log
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-app = Flask(__name__)
-
-def translate_with_gemini(text):
-    has_korean = any(ord('가') <= ord(c) <= ord('힣') for c in text)
-    if has_korean:
-        prompt = f"Dịch câu sau sang tiếng Việt tự nhiên, giữ nguyên ý nghĩa, tuyệt đối không thêm từ xưng hô: {text}"
-        direction_label = "🇰🇷 ➔ 🇻🇳"
-    else:
-        prompt = f"Dịch câu sau sang tiếng Hàn, dùng văn phong kính ngữ lịch sự (존댓말), chỉ trả về kết quả không kèm giải thích: {text}"
-        direction_label = "🇻🇳 ➔ 🇰🇷"
-
-    # Dùng API version v1 và model gemini-pro (được hỗ trợ rộng rãi trên Google Cloud)
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        res_json = response.json()
+async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
         
-        if "candidates" in res_json:
-            translated_text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-            return f"{direction_label}\n{translated_text}"
-        else:
-            print(f"Lỗi trả về từ Google API: {res_json}")
-            return f"Lỗi API: {res_json.get('error', {}).get('message', 'Không rõ nguyên nhân')}"
-    except Exception as e:
-        print(f"Lỗi kết nối API: {e}")
-        return f"Lỗi kết nối: {str(e)}"
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        json_str = request.get_data().decode('UTF-8')
-        update = telebot.types.Update.de_json(json_str)
-        bot.process_new_updates([update])
-    except Exception as e:
-        print(f"Lỗi Webhook: {e}")
-    return "OK", 200
-
-@bot.message_handler(func=lambda message: True, content_types=['text'])
-def handle_message(message):
-    text = message.text
-    if not text or text.startswith('/'):
+    user_text = update.message.text.strip()
+    
+    if user_text.startswith('/'):
         return
 
-    result = translate_with_gemini(text)
-    bot.reply_to(message, result)
+    try:
+        # Kiểm tra xem có ký tự tiếng Hàn (Hangul) trong câu không
+        has_korean = any('가' <= c <= '힣' for c in user_text)
+        
+        if has_korean:
+            # Nếu có tiếng Hàn -> Dịch sang Tiếng Việt
+            translated = GoogleTranslator(source='ko', target='vi').translate(user_text)
+        else:
+            # Nếu là tiếng Việt (hoặc ngôn ngữ khác) -> Dịch sang Tiếng Hàn kính ngữ/trang trọng
+            translated = GoogleTranslator(source='vi', target='ko').translate(user_text)
 
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+        # Trả về kết quả dịch chuẩn xác
+        if translated:
+            await update.message.reply_text(translated)
+            
+    except Exception as e:
+        print(f"Lỗi dịch thuật: {e}")
+        # Không làm gì thêm để tránh spam lỗi vào nhóm
 
-if __name__ == "__main__":
-    t = threading.Thread(target=run_flask)
-    t.start()
+if __name__ == '__main__':
+    # Token của bạn
+    TOKEN = '8640156640:AAGEFPqRwrVoEj38gfPoiFrrvHwhGtcrJTE'
+    
+    app = ApplicationBuilder().token(TOKEN).build()
+    
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), translate_text))
+    
+    print("Bot dịch Hàn - Việt đang chạy...")
+    app.run_polling()
