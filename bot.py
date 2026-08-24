@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from deep_translator import GoogleTranslator
 
-# --- PHẦN 1: TẠO MÁY CHỦ WEB GIẢ LẬP CHO RENDER & UPTIMEROBOT ---
+# --- PHẦN 1: MÁY CHỦ WEB GIẢ LẬP ĐỂ GIỮ RENDER KHÔNG BỊ SẬP ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -18,7 +18,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# --- PHẦN 2: LOGGING VÀ LOGIC BOT TELEGRAM ---
+# --- PHẦN 2: LOGGING VÀ LOGIC DỊCH THUẬT 2 CHIỀU ---
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -34,12 +34,15 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        has_korean = any('가' <= c <= '힣' for c in user_text)
+        # Đếm số lượng ký tự tiếng Hàn (Hangul) trong câu để nhận diện chính xác chiều dịch
+        korean_char_count = sum(1 for c in user_text if '가' <= c <= '힣')
         
-        if has_korean:
+        if korean_char_count > 0:
+            # Nếu có chứa chữ Hàn -> Dịch sang Tiếng Việt
             translated = GoogleTranslator(source='ko', target='vi').translate(user_text)
             header = "🇰🇷 → 🇻🇳"
         else:
+            # Nếu là tiếng Việt -> Dịch sang Tiếng Hàn
             translated = GoogleTranslator(source='vi', target='ko').translate(user_text)
             header = "🇻🇳 → 🇰🇷"
 
@@ -51,7 +54,7 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Lỗi dịch thuật: {e}")
 
 if __name__ == '__main__':
-    # Khởi chạy web server ở một luồng riêng để Render và UptimeRobot nhận diện
+    # Khởi chạy web server ngầm
     server_thread = threading.Thread(target=run_web_server)
     server_thread.daemon = True
     server_thread.start()
