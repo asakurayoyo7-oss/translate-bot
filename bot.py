@@ -5,8 +5,12 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 from deep_translator import GoogleTranslator
+from langdetect import detect, DetectorFactory
 
-# --- PHẦN 1: MÁY CHỦ WEB GIẢ LẬP ĐỂ GIỮ RENDER KHÔNG BỊ SẬP ---
+# Đảm bảo kết quả nhận diện ngôn ngữ ổn định
+DetectorFactory.seed = 0
+
+# --- PHẦN 1: MÁY CHỦ WEB GIẢ LẬP CHO RENDER ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -18,7 +22,7 @@ def run_web_server():
     server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     server.serve_forever()
 
-# --- PHẦN 2: LOGGING VÀ LOGIC DỊCH THUẬT 2 CHIỀU ---
+# --- PHẦN 2: LOGGING VÀ LOGIC DỊCH TỰ ĐỘNG THÔNG MINH ---
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -34,17 +38,17 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Đếm số lượng ký tự tiếng Hàn (Hangul) trong câu để nhận diện chính xác chiều dịch
-        korean_char_count = sum(1 for c in user_text if '가' <= c <= '힣')
+        # Tự động phát hiện ngôn ngữ của tin nhắn
+        detected_lang = detect(user_text)
         
-        if korean_char_count > 0:
-            # Nếu có chứa chữ Hàn -> Dịch sang Tiếng Việt
-            translated = GoogleTranslator(source='ko', target='vi').translate(user_text)
-            header = "🇰🇷 → 🇻🇳"
-        else:
-            # Nếu là tiếng Việt -> Dịch sang Tiếng Hàn
+        # Nếu ngôn ngữ phát hiện là Tiếng Việt ('vi') -> Dịch sang Tiếng Hàn
+        if detected_lang == 'vi':
             translated = GoogleTranslator(source='vi', target='ko').translate(user_text)
             header = "🇻🇳 → 🇰🇷"
+        else:
+            # Ngược lại (Tiếng Hàn, Tiếng Anh,...) -> Dịch sang Tiếng Việt
+            translated = GoogleTranslator(source='auto', target='vi').translate(user_text)
+            header = "🇰🇷 → 🇻🇳"
 
         if translated:
             final_reply = f"{header}\n{translated}"
@@ -54,17 +58,15 @@ async def translate_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Lỗi dịch thuật: {e}")
 
 if __name__ == '__main__':
-    # Khởi chạy web server ngầm
     server_thread = threading.Thread(target=run_web_server)
     server_thread.daemon = True
     server_thread.start()
     print("Web server giả lập đã khởi động...")
 
-    # Token của bot
     TOKEN = '8640156640:AAGEFPqRwrVoEj38gfPoiFrrvHwhGtcrJTE'
     
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), translate_text))
     
-    print("Bot dịch Hàn - Việt đang chạy...")
+    print("Bot dịch tự động đang chạy...")
     app.run_polling()
