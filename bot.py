@@ -56,7 +56,7 @@ async def main():
     await start_web_server()
 
     # Token của bot Telegram
-    TOKEN = '8640156640:AAGEFPqRwrVoEj38gfPoiFrrvHwhGtcrJTE'
+    TOKEN = '8640156640:AAGPxlCnFra379danxa-SPD0K59W1zZ-Te8'
     
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), translate_text))
